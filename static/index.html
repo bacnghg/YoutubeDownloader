@@ -55,9 +55,31 @@ textarea:focus,select:focus,input[type=text]:focus{outline:none;border-color:var
 textarea{resize:vertical;min-height:120px;line-height:1.6;font-family:'SF Mono','Consolas',monospace}
 textarea::placeholder{color:var(--muted)}
 
-/* folder input row */
-.path-row{display:flex;gap:6px;align-items:center}
-.path-row input{flex:1}
+/* folder picker */
+.folder-row{
+  display:flex;align-items:center;gap:8px;
+  background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;transition:border-color .15s;
+}
+.folder-row:hover{border-color:var(--accent)}
+.folder-row svg{flex-shrink:0;color:var(--accent)}
+.folder-row .folder-path{
+  flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:.85rem;cursor:pointer;
+}
+.folder-row .folder-path.is-default{color:var(--muted)}
+.folder-row .folder-pick{
+  flex-shrink:0;background:var(--accent);border:none;border-radius:6px;
+  color:#fff;font-size:.75rem;padding:4px 10px;cursor:pointer;
+  white-space:nowrap;transition:opacity .15s;
+}
+.folder-row .folder-pick:hover{opacity:.85}
+.folder-row .folder-clear{
+  flex-shrink:0;display:none;background:none;border:none;
+  color:var(--muted);cursor:pointer;font-size:1.1rem;line-height:1;
+  padding:0 2px;transition:color .15s;
+}
+.folder-row .folder-clear:hover{color:var(--text)}
 .path-hint{font-size:.72rem;color:var(--muted);margin-top:4px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
@@ -255,10 +277,15 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
 
     <div class="field">
       <label><b>Folder lưu video</b></label>
-      <div class="path-row">
-        <input type="text" id="outputPath" placeholder="Mặc định: ./downloads">
+      <div class="folder-row" id="folderBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+        </svg>
+        <span class="folder-path is-default" id="folderPath">Mặc định: ./downloads</span>
+        <button type="button" class="folder-clear" id="folderClear" title="Về mặc định" onclick="clearFolder()">×</button>
+        <button type="button" class="folder-pick" onclick="pickFolder()">Chọn folder</button>
       </div>
-      <div class="path-hint" id="pathHint">Đang tải cấu hình...</div>
+      <input type="hidden" id="outputPath">
     </div>
 
     <!-- ── Auth section ── -->
@@ -386,12 +413,44 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
 (async () => {
   try {
     const cfg = await fetch('/api/config').then(r => r.json());
-    document.getElementById('pathHint').textContent = `Mặc định: ${cfg.download_path}`;
-    document.getElementById('outputPath').dataset.default = cfg.download_path;
-  } catch(_) {
-    document.getElementById('pathHint').textContent = '';
-  }
+    document.getElementById('folderPath').textContent = `Mặc định: ${cfg.download_path}`;
+    document.getElementById('folderBtn').dataset.default = cfg.download_path;
+  } catch(_) {}
 })();
+
+// ── Folder picker ──
+async function pickFolder() {
+  const btn = document.getElementById('folderBtn');
+  const pathEl = document.getElementById('folderPath');
+  const clearBtn = document.getElementById('folderClear');
+  const hiddenInput = document.getElementById('outputPath');
+
+  btn.style.opacity = '.6';
+  btn.style.pointerEvents = 'none';
+  try {
+    const res = await fetch('/api/browse-folder').then(r => r.json());
+    if (res.path) {
+      pathEl.textContent = res.path;
+      pathEl.classList.remove('is-default');
+      hiddenInput.value = res.path;
+      clearBtn.style.display = 'block';
+    }
+  } finally {
+    btn.style.opacity = '';
+    btn.style.pointerEvents = '';
+  }
+}
+
+function clearFolder() {
+  const btn = document.getElementById('folderBtn');
+  const pathEl = document.getElementById('folderPath');
+  const clearBtn = document.getElementById('folderClear');
+  const hiddenInput = document.getElementById('outputPath');
+  pathEl.textContent = `Mặc định: ${btn.dataset.default || './downloads'}`;
+  pathEl.classList.add('is-default');
+  hiddenInput.value = '';
+  clearBtn.style.display = 'none';
+}
 
 // ── Workers slider ──
 const workersEl = document.getElementById('workers');

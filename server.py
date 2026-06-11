@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import queue
+import subprocess
 import threading
 import time
 import uuid
@@ -49,6 +50,25 @@ async def index():
 @app.get("/api/config")
 async def get_config():
     return {"download_path": str(DOWNLOAD_PATH)}
+
+
+@app.get("/api/browse-folder")
+async def browse_folder():
+    """Open a native macOS folder picker dialog and return the chosen path."""
+    script = 'POSIX path of (choose folder with prompt "Chọn folder lưu video:")'
+    try:
+        proc = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ['osascript', '-e', script],
+                capture_output=True, text=True, timeout=120
+            )
+        )
+        if proc.returncode == 0:
+            return {"path": proc.stdout.strip()}
+        return {"path": ""}   # user cancelled
+    except Exception:
+        return {"path": ""}
 
 
 # ── Browser profile detection ─────────────────────────────────────────────────

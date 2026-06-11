@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+
+# Downloaded videos
+downloads/
+
+# Logs — giữ thư mục, bỏ qua file bên trong
+logs/*
+!logs/.gitkeep
+
+# Planning doc
+app.md
+
+# URL list (có thể chứa link cá nhân)
+urls.txt
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

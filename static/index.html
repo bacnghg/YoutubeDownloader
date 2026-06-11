@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YouTube Downloader</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#0d1117;
+  --surface:#161b22;
+  --surface2:#21262d;
+  --border:#30363d;
+  --primary:#58a6ff;
+  --primary-dim:rgba(88,166,255,.12);
+  --success:#3fb950;
+  --success-dim:rgba(63,185,80,.12);
+  --error:#f85149;
+  --error-dim:rgba(248,81,73,.12);
+  --warning:#d29922;
+  --text:#c9d1d9;
+  --muted:#8b949e;
+  --radius:8px;
+}
+
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── Header ── */
+.header{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:12px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0;
+}
+.header h1{font-size:1.1rem;font-weight:600}
+.header .sub{color:var(--muted);font-size:.8rem;margin-top:1px}
+
+/* ── Main layout ── */
+.main{display:grid;grid-template-columns:380px 1fr;flex:1;overflow:hidden}
+
+/* ── Left panel ── */
+.left{
+  background:var(--surface);border-right:1px solid var(--border);
+  padding:18px;overflow-y:auto;display:flex;flex-direction:column;gap:16px;
+}
+
+.field label{display:block;font-size:.8rem;font-weight:500;color:var(--muted);margin-bottom:5px}
+.field label b{color:var(--text);font-weight:600}
+
+textarea,select,input[type=text]{
+  width:100%;background:var(--bg);border:1px solid var(--border);
+  border-radius:var(--radius);color:var(--text);padding:8px 10px;
+  font-size:.8125rem;font-family:inherit;transition:border-color .15s;
+}
+textarea:focus,select:focus,input[type=text]:focus{outline:none;border-color:var(--primary)}
+textarea{resize:vertical;min-height:120px;line-height:1.6;font-family:'SF Mono','Consolas',monospace}
+textarea::placeholder{color:var(--muted)}
+
+/* folder input row */
+.path-row{display:flex;gap:6px;align-items:center}
+.path-row input{flex:1}
+.path-hint{font-size:.72rem;color:var(--muted);margin-top:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+.slider-wrap{display:flex;flex-direction:column;gap:4px}
+.slider-top{display:flex;justify-content:space-between;align-items:center}
+.slider-val{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:4px;padding:1px 7px;font-size:.8rem;font-weight:700;color:var(--primary);
+}
+input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
+
+.toggle-row{display:flex;align-items:center;gap:8px}
+.toggle{position:relative;width:34px;height:18px;flex-shrink:0}
+.toggle input{display:none}
+.knob{
+  position:absolute;inset:0;background:var(--border);border-radius:9px;
+  cursor:pointer;transition:background .2s;
+}
+.knob::before{
+  content:'';position:absolute;left:2px;top:2px;
+  width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .2s;
+}
+.toggle input:checked+.knob{background:var(--primary)}
+.toggle input:checked+.knob::before{transform:translateX(16px)}
+.toggle-label{font-size:.8125rem;color:var(--muted);cursor:pointer;user-select:none}
+
+.btn-start{
+  width:100%;padding:10px;border:none;border-radius:var(--radius);
+  background:var(--primary);color:#0d1117;
+  font-size:.9rem;font-weight:700;cursor:pointer;
+  transition:background .15s,opacity .15s,transform .1s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn-start:hover:not(:disabled){background:#79b8ff}
+.btn-start:active:not(:disabled){transform:scale(.98)}
+.btn-start:disabled{opacity:.45;cursor:not-allowed}
+
+.spinner{
+  width:14px;height:14px;border:2px solid rgba(0,0,0,.25);
+  border-top-color:#0d1117;border-radius:50%;
+  animation:spin .7s linear infinite;display:none;flex-shrink:0;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Right panel ── */
+.right{display:flex;flex-direction:column;overflow:hidden}
+
+.right-hdr{
+  padding:12px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+.right-title{font-weight:600;font-size:.9rem}
+
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 10px;border-radius:12px;font-size:.75rem;font-weight:500;
+}
+.badge-idle{background:var(--surface2);color:var(--muted)}
+.badge-running{background:var(--primary-dim);color:var(--primary)}
+.badge-done{background:var(--success-dim);color:var(--success)}
+.badge-error{background:var(--error-dim);color:var(--error)}
+
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.dot-pulse{animation:blink 1.2s infinite}
+
+/* ── Video area ── */
+.varea{flex:1;overflow-y:auto;padding:12px 20px;display:flex;flex-direction:column;gap:7px}
+
+.empty{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:10px;color:var(--muted);
+}
+.empty svg{opacity:.18}
+.empty p{font-size:.875rem}
+
+/* ── Video card ── */
+.vcard{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:10px 13px;transition:border-color .2s;
+}
+.vcard-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.vnum{
+  flex-shrink:0;min-width:22px;height:22px;padding:0 5px;border-radius:4px;
+  background:var(--surface2);font-size:.7rem;font-weight:700;
+  display:flex;align-items:center;justify-content:center;color:var(--muted);
+}
+.vtitle{font-size:.8125rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.vstatus{flex-shrink:0;font-size:.75rem;font-weight:700;width:14px;text-align:center}
+.vdur{flex-shrink:0;font-size:.72rem;color:var(--muted)}
+
+.track{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden}
+.fill{height:100%;background:var(--primary);border-radius:2px;width:0;transition:width .25s}
+.vmeta{display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);margin-top:4px}
+
+/* loading shimmer for card title */
+@keyframes shimmer{0%{background-position:-200px 0}100%{background-position:200px 0}}
+.loading-text{
+  background:linear-gradient(90deg,var(--surface2) 25%,var(--border) 50%,var(--surface2) 75%);
+  background-size:400px 100%;animation:shimmer 1.4s infinite linear;
+  border-radius:4px;height:12px;width:60%;
+}
+
+.vcard.downloading{border-color:var(--primary)}
+.vcard.downloading .vnum{background:var(--primary-dim);color:var(--primary)}
+.vcard.done{border-color:var(--success)}
+.vcard.done .vnum{background:var(--success-dim);color:var(--success)}
+.vcard.done .fill{background:var(--success)}
+.vcard.error{border-color:var(--error)}
+.vcard.error .vnum{background:var(--error-dim);color:var(--error)}
+.vcard.error .fill{background:var(--error)}
+
+/* ── Summary ── */
+.summary{
+  border-top:1px solid var(--border);padding:12px 20px;
+  background:var(--surface);display:none;flex-shrink:0;
+}
+.summary.show{display:block}
+.sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.stat{background:var(--surface2);border-radius:var(--radius);padding:10px 12px;text-align:center}
+.stat-n{font-size:1.4rem;font-weight:700;line-height:1}
+.stat-l{font-size:.7rem;color:var(--muted);margin-top:3px}
+.stat.ok .stat-n{color:var(--success)}
+.stat.fail .stat-n{color:var(--error)}
+.stat.time .stat-n{color:var(--primary);font-size:1.1rem}
+
+/* ── Log ── */
+.log{
+  height:140px;overflow-y:auto;flex-shrink:0;
+  padding:7px 20px;border-top:1px solid var(--border);
+  background:#0a0e14;
+  font-family:'SF Mono','Cascadia Code','Consolas',monospace;font-size:.72rem;line-height:1.7;
+}
+.ll{padding:0}
+.ll.info{color:var(--muted)}
+.ll.ok{color:var(--success)}
+.ll.err{color:var(--error)}
+.ll.warn{color:var(--warning)}
+
+/* ── Auth box ── */
+.auth-box{
+  border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;
+}
+.auth-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 12px;cursor:pointer;user-select:none;
+  background:var(--surface2);transition:background .15s;
+}
+.auth-header:hover{background:var(--border)}
+.auth-title{display:flex;align-items:center;gap:7px;font-size:.8125rem;font-weight:600;color:var(--text)}
+.auth-chevron{font-size:.75rem;color:var(--muted);transition:transform .2s}
+.auth-chevron.open{transform:rotate(90deg)}
+.auth-body{padding:0 12px 12px}
+.auth-tip{
+  display:flex;align-items:center;gap:6px;margin-top:8px;
+  padding:7px 10px;background:var(--success-dim);border-radius:6px;
+  font-size:.78rem;color:var(--success);
+}
+
+/* ── Divider label ── */
+.section-label{font-size:.72rem;font-weight:600;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--muted);margin-bottom:-4px}
+
+/* ── Scrollbars ── */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <svg width="26" height="26" viewBox="0 0 24 24">
+    <rect width="24" height="24" rx="5" fill="#ff0000"/>
+    <path d="M9.5 7.5v9l7-4.5z" fill="white"/>
+  </svg>
+  <div>
+    <h1>YouTube Downloader</h1>
+    <div class="sub">Tải video hàng loạt · Song song · Real-time progress</div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- ── Left: form ── -->
+  <aside class="left">
+
+    <div class="field">
+      <label><b>URLs</b> — mỗi dòng một link (video hoặc playlist)</label>
+      <textarea id="urls" placeholder="https://www.youtube.com/watch?v=...&#10;https://www.youtube.com/playlist?list=...&#10;https://youtu.be/..."></textarea>
+    </div>
+
+    <div class="field">
+      <label><b>Folder lưu video</b></label>
+      <div class="path-row">
+        <input type="text" id="outputPath" placeholder="Mặc định: ./downloads">
+      </div>
+      <div class="path-hint" id="pathHint">Đang tải cấu hình...</div>
+    </div>
+
+    <!-- ── Auth section ── -->
+    <div class="auth-box" id="authBox">
+      <div class="auth-header" onclick="toggleAuth()">
+        <span class="auth-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0">
+            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l5 2.18V11c0 3.5-2.33 6.79-5 7.93C9.33 17.79 7 14.5 7 11V7.18L12 5zm-1 3v4h2V8h-2zm0 6v2h2v-2h-2z"/>
+          </svg>
+          Xác thực (Members-only / Age-restricted)
+        </span>
+        <span class="auth-chevron" id="authChevron">▸</span>
+      </div>
+
+      <div class="auth-body" id="authBody" style="display:none">
+        <div class="field" style="margin-top:10px">
+          <label><b>Browser</b> — đọc cookies từ browser đã đăng nhập YouTube</label>
+          <select id="cookiesBrowser" onchange="onBrowserChange()">
+            <option value="">Không dùng cookies</option>
+            <option value="chrome">Chrome</option>
+            <option value="firefox">Firefox</option>
+            <option value="safari">Safari</option>
+            <option value="brave">Brave</option>
+            <option value="edge">Edge</option>
+            <option value="chromium">Chromium</option>
+          </select>
+        </div>
+
+        <!-- Profile selector (shown when browser has multiple profiles) -->
+        <div class="field" id="profileField" style="display:none">
+          <label><b>Account / Profile</b> — chọn tài khoản YouTube</label>
+          <select id="cookiesProfile" onchange="onProfileChange()">
+            <option value="">Đang tải...</option>
+          </select>
+          <div class="path-hint" id="profileHint"></div>
+        </div>
+
+        <div class="field" id="cookiesFileField" style="display:none">
+          <label><b>Hoặc file cookies.txt</b></label>
+          <input type="text" id="cookiesFile" placeholder="~/cookies.txt hoặc đường dẫn tuyệt đối">
+          <div class="path-hint">Xuất từ browser bằng extension "Get cookies.txt LOCALLY"</div>
+        </div>
+
+        <div class="auth-tip" id="authTip" style="display:none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="var(--success)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          <span id="authTipText"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="field">
+        <label><b>Chất lượng</b></label>
+        <select id="quality">
+          <option value="best">Best H.264 · 1080p (QuickTime ✓)</option>
+          <option value="1080p">1080p H.264 (QuickTime ✓)</option>
+          <option value="720p">720p H.264 (QuickTime ✓)</option>
+          <option value="480p">480p H.264 (QuickTime ✓)</option>
+          <option value="max">Max quality · 4K AV1 (cần VLC)</option>
+          <option value="audio">Audio only (MP3)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <div class="slider-wrap">
+          <div class="slider-top">
+            <label style="margin:0"><b>Luồng song song</b></label>
+            <span class="slider-val" id="wval">3</span>
+          </div>
+          <input type="range" id="workers" min="1" max="8" value="3">
+        </div>
+      </div>
+    </div>
+
+    <div class="toggle-row">
+      <label class="toggle">
+        <input type="checkbox" id="dryrun">
+        <span class="knob"></span>
+      </label>
+      <label class="toggle-label" for="dryrun">Dry Run — kiểm tra không tải thực sự</label>
+    </div>
+
+    <button class="btn-start" id="btnStart" onclick="startDownload()">
+      <span class="spinner" id="spinner"></span>
+      <span id="btnLabel">▶  Bắt đầu tải xuống</span>
+    </button>
+
+  </aside>
+
+  <!-- ── Right: progress ── -->
+  <section class="right">
+    <div class="right-hdr">
+      <span class="right-title">Tiến trình tải xuống</span>
+      <span class="badge badge-idle" id="badge">
+        <span class="dot" id="bdot"></span>
+        <span id="blabel">Chờ</span>
+      </span>
+    </div>
+
+    <div class="varea" id="varea">
+      <div class="empty" id="empty">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="var(--muted)">
+          <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/>
+        </svg>
+        <p>Nhập URL và nhấn Bắt đầu</p>
+      </div>
+    </div>
+
+    <div class="summary" id="summary">
+      <div class="sgrid">
+        <div class="stat ok"><div class="stat-n" id="sOk">0</div><div class="stat-l">Thành công</div></div>
+        <div class="stat fail"><div class="stat-n" id="sFail">0</div><div class="stat-l">Thất bại</div></div>
+        <div class="stat"><div class="stat-n" id="sSkip">0</div><div class="stat-l">Bỏ qua</div></div>
+        <div class="stat time"><div class="stat-n" id="sTime">—</div><div class="stat-l">Thời gian</div></div>
+      </div>
+    </div>
+
+    <div class="log" id="log"><div class="ll info">Sẵn sàng.</div></div>
+  </section>
+
+</div>
+
+<script>
+// ── Init: load default config ──
+(async () => {
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json());
+    document.getElementById('pathHint').textContent = `Mặc định: ${cfg.download_path}`;
+    document.getElementById('outputPath').dataset.default = cfg.download_path;
+  } catch(_) {
+    document.getElementById('pathHint').textContent = '';
+  }
+})();
+
+// ── Workers slider ──
+const workersEl = document.getElementById('workers');
+document.getElementById('wval').textContent = workersEl.value;
+workersEl.addEventListener('input', () => document.getElementById('wval').textContent = workersEl.value);
+
+// ── Auth panel ──
+function toggleAuth() {
+  const body    = document.getElementById('authBody');
+  const chevron = document.getElementById('authChevron');
+  const open    = body.style.display === 'none';
+  body.style.display = open ? 'block' : 'none';
+  chevron.classList.toggle('open', open);
+}
+
+async function onBrowserChange() {
+  const browser     = document.getElementById('cookiesBrowser').value;
+  const profileField = document.getElementById('profileField');
+  const profileSel  = document.getElementById('cookiesProfile');
+  const profileHint = document.getElementById('profileHint');
+  const tip         = document.getElementById('authTip');
+  const tipText     = document.getElementById('authTipText');
+
+  if (!browser) {
+    profileField.style.display = 'none';
+    tip.style.display = 'none';
+    return;
+  }
+
+  // Show loading
+  profileField.style.display = 'block';
+  profileSel.innerHTML = '<option value="">Đang quét profiles...</option>';
+  profileHint.textContent = '';
+  tip.style.display = 'none';
+
+  try {
+    const res      = await fetch(`/api/browsers/profiles?browser=${browser}`);
+    const data     = await res.json();
+    const profiles = data.profiles || [];
+
+    profileSel.innerHTML = '';
+
+    if (profiles.length === 0) {
+      profileSel.innerHTML = '<option value="">Không tìm thấy profile</option>';
+      profileHint.textContent = 'Dùng profile mặc định của browser';
+    } else {
+      profiles.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.path;
+        // Store all emails for tooltip
+        opt.dataset.emails = JSON.stringify(p.emails || []);
+
+        let label = p.name;
+        if (p.email) label += `  ·  ${p.email}`;
+        const extra = (p.emails || []).length;
+        if (extra > 1) label += `  (+${extra - 1} accounts)`;
+        if (!p.email && (!p.emails || p.emails.length === 0)) label += '  (không có account Google)';
+        opt.textContent = label;
+        profileSel.appendChild(opt);
+      });
+      profileHint.textContent = `Tìm thấy ${profiles.length} profile — chọn profile chứa account YouTube của bạn`;
+    }
+
+    onProfileChange();
+
+  } catch(e) {
+    profileSel.innerHTML = '<option value="">Lỗi khi đọc profiles</option>';
+    profileHint.textContent = e.message;
+  }
+}
+
+function onProfileChange() {
+  const tip     = document.getElementById('authTip');
+  const tipText = document.getElementById('authTipText');
+  const hint    = document.getElementById('profileHint');
+  const browser = document.getElementById('cookiesBrowser').value;
+  const sel     = document.getElementById('cookiesProfile');
+  const opt     = sel.options[sel.selectedIndex];
+
+  if (!browser || !opt || !opt.value) { tip.style.display = 'none'; return; }
+
+  const emails = JSON.parse(opt.dataset.emails || '[]');
+  const name   = opt.textContent.split('·')[0].trim().split('(')[0].trim();
+
+  tip.style.display = 'flex';
+
+  if (emails.length > 1) {
+    tipText.innerHTML = `Profile <b>${name}</b> chứa ${emails.length} account: <br>
+      <span style="font-size:.7rem;opacity:.85">${emails.join(' · ')}</span>`;
+  } else if (emails.length === 1) {
+    tipText.textContent = `Profile "${name}" · ${emails[0]}`;
+  } else {
+    tipText.textContent = `Profile "${name}" — không có account Google (có thể đã login YouTube riêng)`;
+  }
+
+  // Warn about active session
+  if (emails.length > 1) {
+    hint.innerHTML = `⚠️ Profile này có <b>${emails.length} accounts</b> — yt-dlp dùng account đang <b>active trên YouTube</b> trong Chrome.
+      Hãy mở Chrome, vào youtube.com, switch sang đúng account, rồi đóng Chrome trước khi tải.`;
+  } else {
+    hint.textContent = `Đảm bảo đã đăng nhập YouTube trong Chrome trước khi tải`;
+  }
+}
+
+// ── State ──
+let cards = {};
+
+// ── Logging ──
+function log(msg, cls = 'info') {
+  const el  = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = `ll ${cls}`;
+  const t = new Date().toLocaleTimeString('vi', {hour12:false});
+  div.textContent = `[${t}] ${msg}`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Badge ──
+function setBadge(state) {
+  document.getElementById('badge').className = `badge badge-${state}`;
+  document.getElementById('bdot').className  = `dot${state==='running' ? ' dot-pulse' : ''}`;
+  document.getElementById('blabel').textContent =
+    {idle:'Chờ', running:'Đang tải…', done:'Hoàn tất', error:'Lỗi'}[state] || state;
+}
+
+// ── Button ──
+function setRunning(on) {
+  document.getElementById('btnStart').disabled    = on;
+  document.getElementById('spinner').style.display = on ? 'block' : 'none';
+  document.getElementById('btnLabel').textContent  = on ? 'Đang tải…' : '▶  Bắt đầu tải xuống';
+}
+
+// ── Create card with shimmer placeholder ──
+function getCard(index) {
+  if (cards[index]) return cards[index];
+
+  const empty = document.getElementById('empty');
+  if (empty) empty.remove();
+
+  const card = document.createElement('div');
+  card.className = 'vcard';
+  card.id = `c${index}`;
+  card.innerHTML = `
+    <div class="vcard-head">
+      <div class="vnum" id="cn${index}">${index + 1}</div>
+      <div class="vtitle" id="ct${index}"><span class="loading-text"></span></div>
+      <span class="vdur" id="cd${index}"></span>
+      <span class="vstatus" id="cs${index}"></span>
+    </div>
+    <div class="track"><div class="fill" id="cf${index}"></div></div>
+    <div class="vmeta">
+      <span id="cp${index}">0%</span>
+      <span id="cm${index}"></span>
+    </div>`;
+  document.getElementById('varea').appendChild(card);
+  cards[index] = card;
+  return card;
+}
+
+// ── WebSocket message handler ──
+function handle(msg) {
+  switch (msg.type) {
+
+    case 'job_start':
+      log(`Bắt đầu: ${msg.total} video · ${msg.quality} · ${msg.workers} luồng${msg.dry_run?' · [DRY-RUN]':''}`);
+      log(`Lưu tại: ${msg.output_path}`);
+      setBadge('running');
+      break;
+
+    case 'playlist_info':
+      log(`Playlist "${msg.title}" — ${msg.total} videos`);
+      break;
+
+    case 'video_start':
+      getCard(msg.index);
+      break;
+
+    case 'video_info': {
+      const c = getCard(msg.index);
+      c.classList.add('downloading');
+      document.getElementById(`ct${msg.index}`).textContent = msg.title;
+      if (msg.duration) document.getElementById(`cd${msg.index}`).textContent = msg.duration;
+      log(`Tải: "${msg.title}"`);
+      break;
+    }
+
+    case 'video_progress': {
+      const f = document.getElementById(`cf${msg.index}`);
+      const p = document.getElementById(`cp${msg.index}`);
+      const m = document.getElementById(`cm${msg.index}`);
+      if (f) f.style.width = `${msg.percent}%`;
+      if (p) p.textContent = `${msg.percent}%`;
+      if (m) m.textContent = msg.speed ? `${msg.speed}${msg.eta ? ' · ETA '+msg.eta : ''}` : '';
+      break;
+    }
+
+    case 'video_done': {
+      const c = cards[msg.index];
+      if (c) {
+        c.classList.remove('downloading');
+        c.classList.add('done');
+        const f = document.getElementById(`cf${msg.index}`);
+        const p = document.getElementById(`cp${msg.index}`);
+        const m = document.getElementById(`cm${msg.index}`);
+        const s = document.getElementById(`cs${msg.index}`);
+        if (f) f.style.width = '100%';
+        if (p) p.textContent = msg.dry_run ? 'dry-run' : '100%';
+        if (m) m.textContent = msg.dry_run ? 'Không tải thực' : 'Hoàn tất';
+        if (s) s.textContent = '✓';
+      }
+      log(`✅ ${msg.title}`, 'ok');
+      break;
+    }
+
+    case 'video_error': {
+      const c = cards[msg.index];
+      if (c) {
+        c.classList.remove('downloading');
+        c.classList.add('error');
+        // replace shimmer with title if still loading
+        const t = document.getElementById(`ct${msg.index}`);
+        if (t && t.querySelector('.loading-text')) t.textContent = msg.title;
+        const m = document.getElementById(`cm${msg.index}`);
+        const s = document.getElementById(`cs${msg.index}`);
+        if (m) m.textContent = msg.error;
+        if (s) s.textContent = '✗';
+      }
+      log(`❌ ${msg.title}: ${msg.error}`, 'err');
+      break;
+    }
+
+    case 'log':
+      log(msg.message, msg.level==='error'?'err': msg.level==='warning'?'warn':'info');
+      break;
+
+    case 'job_done':
+      setBadge('done');
+      setRunning(false);
+      document.getElementById('sOk').textContent   = msg.success;
+      document.getElementById('sFail').textContent = msg.failed;
+      document.getElementById('sSkip').textContent = msg.skipped;
+      document.getElementById('sTime').textContent = msg.elapsed_str || `${msg.elapsed}s`;
+      document.getElementById('summary').classList.add('show');
+      log(`✅ Hoàn tất! Thành công: ${msg.success} · Thất bại: ${msg.failed} · ${msg.elapsed_str}`, 'ok');
+      break;
+
+    case 'error':
+      log(`Lỗi: ${msg.message}`, 'err');
+      setBadge('error');
+      setRunning(false);
+      break;
+  }
+}
+
+// ── Start ──
+async function startDownload() {
+  const raw = document.getElementById('urls').value.trim();
+  if (!raw) { alert('Vui lòng nhập ít nhất một URL!'); return; }
+
+  const urls = raw.split('\n').map(u => u.trim()).filter(u => u && !u.startsWith('#'));
+  if (!urls.length) { alert('Không tìm thấy URL hợp lệ!'); return; }
+
+  const quality        = document.getElementById('quality').value;
+  const workers        = parseInt(workersEl.value);
+  const dryRun         = document.getElementById('dryrun').checked;
+  const outputPath     = document.getElementById('outputPath').value.trim();
+  const cookiesBrowser = document.getElementById('cookiesBrowser').value;
+  const cookiesProfile = document.getElementById('cookiesProfile').value;
+  const cookiesFile    = document.getElementById('cookiesFile').value.trim();
+
+  // reset UI
+  cards = {};
+  document.getElementById('varea').innerHTML = '';
+  document.getElementById('summary').classList.remove('show');
+  document.getElementById('log').innerHTML = '';
+  setBadge('idle');
+  setRunning(true);
+
+  try {
+    const res = await fetch('/api/jobs', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({urls, quality, workers, dry_run: dryRun,
+                            output_path: outputPath,
+                            cookies_browser: cookiesBrowser,
+                            cookies_profile: cookiesProfile,
+                            cookies_file: cookiesFile}),
+    });
+    if (!res.ok) throw new Error('Không thể tạo job');
+    const {job_id} = await res.json();
+    log(`Job ${job_id} · ${urls.length} URL(s)`);
+
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws    = new WebSocket(`${proto}//${location.host}/ws/${job_id}`);
+
+    ws.onmessage = e => { try { const m = JSON.parse(e.data); handle(m); } catch(_){} };
+    ws.onerror   = () => { log('Lỗi kết nối WebSocket', 'err'); setRunning(false); setBadge('error'); };
+    ws.onclose   = () => {
+      if (document.getElementById('badge').classList.contains('badge-running')) {
+        setRunning(false); setBadge('idle');
+      }
+    };
+  } catch(err) {
+    log(`Lỗi: ${err.message}`, 'err');
+    setRunning(false);
+  }
+}
+
+// Ctrl/Cmd + Enter to start
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') startDownload();
+});
+</script>
+</body>
+</html>

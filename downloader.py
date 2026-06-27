@@ -4,10 +4,13 @@ import shutil
 import time
 import logging
 import threading
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Callable, Optional
 
 import yt_dlp
+from yt_dlp.utils import sanitize_filename
 
 def _find_bin(name: str) -> str | None:
     """Find a binary — check PATH then common macOS locations."""
@@ -23,10 +26,19 @@ def _find_bin(name: str) -> str | None:
 _NODE_PATH   = _find_bin('node')
 _FFMPEG_PATH = _find_bin('ffmpeg')
 
-from config import DOWNLOAD_PATH, OUTPUT_TEMPLATE, QUALITY_MAP, MAX_RETRIES, RETRY_DELAY
-from utils import is_valid_youtube_url
+from config import DOWNLOAD_PATH, OUTPUT_TEMPLATE, UDEMY_OUTPUT_TEMPLATE, QUALITY_MAP, MAX_RETRIES, RETRY_DELAY
+from utils import is_valid_youtube_url, detect_source
 
 _ANSI_RE = re.compile(r'\x1b\[[0-9;]*[mK]')
+
+def _extract_video_id(url: str) -> str | None:
+    try:
+        p = urllib.parse.urlparse(url)
+        if 'youtu.be' in p.netloc:
+            return p.path.lstrip('/')
+        return urllib.parse.parse_qs(p.query).get('v', [None])[0]
+    except Exception:
+        return None
 
 def _clean(msg: str) -> str:
     msg = _ANSI_RE.sub('', msg).strip()
@@ -38,10 +50,12 @@ _PERMANENT_ERRORS = [
     'Private video',
     'removed by the uploader',
     'This video is unavailable',
-    'Join this channel',       # members-only
+    'Join this channel',
     'members-only',
     'This video is members-only',
     'Sign in to confirm your age',
+    "You don't have access to this course",  # Udemy: chưa mua khoá học
+    'please login',                           # Udemy: chưa đăng nhập
 ]
 
 
@@ -103,6 +117,27 @@ class Downloader:
         self.cookies_file = cookies_file.strip()
         os.makedirs(self.output_path, exist_ok=True)
 
+    @property
+    def _archive_path(self) -> str:
+        return os.path.join(self.output_path, '.archive.txt')
+
+    def _in_archive(self, video_id: str) -> bool:
+        archive = Path(self._archive_path)
+        if not archive.exists():
+            return False
+        try:
+            return f'youtube {video_id}' in archive.read_text(encoding='utf-8')
+        except Exception:
+            return False
+
+    def _file_exists(self, title: str) -> bool:
+        """Check if an output file with this title already exists in the output folder."""
+        stem = sanitize_filename(title)
+        for ext in ('mp4', 'mkv', 'webm', 'mp3', 'm4a'):
+            if os.path.exists(os.path.join(self.output_path, f'{stem}.{ext}')):
+                return True
+        return False
+
     def _emit(self, event: dict):
         try:
             self.on_event(event)
@@ -134,6 +169,25 @@ class Downloader:
             opts.update(extra)
         return opts
 
+    def _build_udemy_ydl_opts(self, index: int) -> dict:
+        fmt = QUALITY_MAP.get(self.quality, QUALITY_MAP['best'])
+        opts = self._ydl_base({
+            'format': fmt,
+            'outtmpl': os.path.join(self.output_path, UDEMY_OUTPUT_TEMPLATE),
+            'merge_output_format': 'mp4',
+            'ignoreerrors': False,
+            'noplaylist': True,
+            'download_archive': self._archive_path,
+            'progress_hooks': [self._make_progress_hook(index)],
+        })
+        if self.quality == 'audio':
+            opts['postprocessors'] = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }]
+        return opts
+
     def _build_ydl_opts(self, index: int) -> dict:
         fmt = QUALITY_MAP.get(self.quality, QUALITY_MAP['best'])
         opts = self._ydl_base({
@@ -142,6 +196,7 @@ class Downloader:
             'merge_output_format': 'mp4',   # always output MP4 container
             'ignoreerrors': False,
             'noplaylist': True,
+            'download_archive': self._archive_path,
             'progress_hooks': [self._make_progress_hook(index)],
         })
         if self.quality == 'audio':
@@ -188,23 +243,81 @@ class Downloader:
                     'message': f'Playlist "{title}" — {len(urls)} videos'})
         return urls
 
+    def get_udemy_lectures(self, course_url: str) -> list[str]:
+        self._emit({'type': 'log', 'level': 'info', 'message': 'Đang lấy danh sách bài học Udemy...'})
+        if not (self.cookies_browser or self.cookies_file):
+            self._emit({'type': 'log', 'level': 'warning',
+                        'message': 'Udemy yêu cầu đăng nhập — hãy chọn Browser ở mục Xác thực.'})
+
+        opts = self._ydl_base({'extract_flat': True, 'ignoreerrors': True, 'noplaylist': False})
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(course_url, download=False)
+
+        if not info:
+            self._emit({'type': 'log', 'level': 'error',
+                        'message': 'Không thể lấy thông tin khoá học. Kiểm tra cookies và URL.'})
+            return []
+
+        course_title = info.get('title', 'Unknown Course')
+        entries = info.get('entries', []) or []
+
+        urls: list[str] = []
+        for entry in entries:
+            if not entry:
+                continue
+            sub = entry.get('entries')
+            if sub:
+                # Nested: entry is a chapter/section, sub = lectures
+                for lec in sub:
+                    if lec and (lec.get('url') or lec.get('webpage_url')):
+                        urls.append(lec.get('webpage_url') or lec['url'])
+            else:
+                u = entry.get('webpage_url') or entry.get('url')
+                if u:
+                    urls.append(u)
+
+        self._emit({'type': 'playlist_info', 'title': course_title, 'total': len(urls)})
+        self._emit({'type': 'log', 'level': 'info',
+                    'message': f'Khoá học "{course_title}" — {len(urls)} bài học'})
+        return urls
+
     def _download_single(self, url: str, index: int) -> DownloadResult:
         result = DownloadResult(url, index)
+        source = detect_source(url)
 
-        if not is_valid_youtube_url(url):
-            result.error = 'URL không hợp lệ'
+        if source == 'unknown':
+            result.error = 'URL không hợp lệ (hỗ trợ YouTube và Udemy)'
             self._emit({'type': 'video_error', 'index': index,
-                        'title': 'URL không hợp lệ', 'error': result.error})
+                        'title': url, 'error': result.error})
             return result
+
+        # Fast skip via archive (YouTube only — Udemy archive checked by yt-dlp itself)
+        if source == 'youtube':
+            video_id = _extract_video_id(url)
+            if video_id and self._in_archive(video_id):
+                result.skipped = True
+                self._emit({'type': 'video_skipped', 'index': index, 'title': '', 'url': url})
+                with self.lock:
+                    self.logger.info(f"⏭ Skipped (archive): {url}")
+                return result
 
         self._emit({'type': 'video_start', 'index': index})
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                with yt_dlp.YoutubeDL(self._ydl_base()) as ydl:
+                with yt_dlp.YoutubeDL(self._ydl_base({'noplaylist': True})) as ydl:
                     info = ydl.extract_info(url, download=False)
                     result.title = info.get('title', url)
                     duration = info.get('duration_string', '')
+
+                # File-based skip: YouTube only (Udemy files sit in sub-folders)
+                if source == 'youtube' and self._file_exists(result.title):
+                    result.skipped = True
+                    self._emit({'type': 'video_skipped', 'index': index,
+                                'title': result.title, 'url': url})
+                    with self.lock:
+                        self.logger.info(f"⏭ Skipped (file exists): \"{result.title}\"")
+                    return result
 
                 self._emit({'type': 'video_info', 'index': index,
                             'title': result.title, 'duration': duration})
@@ -215,7 +328,9 @@ class Downloader:
                     result.success = True
                     return result
 
-                with yt_dlp.YoutubeDL(self._build_ydl_opts(index)) as ydl:
+                dl_opts = (self._build_udemy_ydl_opts(index) if source == 'udemy'
+                           else self._build_ydl_opts(index))
+                with yt_dlp.YoutubeDL(dl_opts) as ydl:
                     ydl.download([url])
 
                 result.success = True
@@ -232,6 +347,11 @@ class Downloader:
                             result.error = 'Video members-only — cookies không hợp lệ hoặc chưa tham gia kênh'
                         else:
                             result.error = 'Video members-only — chọn browser đã đăng nhập ở mục Xác thực'
+                    elif "don't have access" in err_msg or 'please login' in err_msg.lower():
+                        if self.cookies_browser or self.cookies_file:
+                            result.error = 'Udemy: cookies không hợp lệ hoặc chưa mua khoá học này'
+                        else:
+                            result.error = 'Udemy: chọn browser đã đăng nhập Udemy ở mục Xác thực'
                     else:
                         result.error = 'Video private hoặc đã bị xóa'
                     self._emit({'type': 'video_error', 'index': index,

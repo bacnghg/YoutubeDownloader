@@ -35,6 +35,13 @@ QUALITY_MAP = {
 
 OUTPUT_TEMPLATE = '%(title)s.%(ext)s'
 
+# Udemy: organise by course → section → lecture
+UDEMY_OUTPUT_TEMPLATE = os.path.join(
+    '%(playlist_title)s',
+    '%(chapter_number)02d - %(chapter)s',
+    '%(playlist_index)03d - %(title)s.%(ext)s',
+)
+
 MAX_WORKERS  = 3
 MAX_RETRIES  = 3
 RETRY_DELAY  = 2  # seconds

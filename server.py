@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from config import DOWNLOAD_PATH
 from downloader import Downloader
-from utils import setup_logger, is_playlist_url, format_duration
+from utils import setup_logger, is_playlist_url, is_udemy_course_url, format_duration
 
 BASE_DIR = Path(__file__).parent
 app = FastAPI(title="YouTube Downloader")
@@ -246,6 +246,8 @@ def _run_download(job: dict):
                 continue
             if is_playlist_url(url):
                 all_urls.extend(downloader.get_playlist_urls(url))
+            elif is_udemy_course_url(url):
+                all_urls.extend(downloader.get_udemy_lectures(url))
             else:
                 all_urls.append(url)
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>YouTube Downloader</title>
+<title>Video Downloader</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 
@@ -193,6 +193,9 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
 .vcard.error{border-color:var(--error)}
 .vcard.error .vnum{background:var(--error-dim);color:var(--error)}
 .vcard.error .fill{background:var(--error)}
+.vcard.skipped{border-color:var(--border);opacity:.6}
+.vcard.skipped .vnum{background:var(--surface2);color:var(--muted)}
+.vcard.skipped .vtitle{color:var(--muted)}
 
 /* ── Summary ── */
 .summary{
@@ -245,6 +248,34 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
 .section-label{font-size:.72rem;font-weight:600;text-transform:uppercase;
   letter-spacing:.06em;color:var(--muted);margin-bottom:-4px}
 
+/* ── Source tabs ── */
+.source-tabs{display:flex;gap:6px;padding:2px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)}
+.source-tab{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
+  padding:7px 12px;border:none;border-radius:8px;background:transparent;
+  color:var(--muted);font-size:.8125rem;font-weight:600;cursor:pointer;
+  transition:background .15s,color .15s;
+}
+.source-tab:hover{color:var(--text)}
+.source-tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.source-tab svg{flex-shrink:0}
+
+/* ── Udemy banner ── */
+.udemy-notice{
+  display:none;padding:9px 12px;border-radius:var(--radius);
+  background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);
+  font-size:.78rem;color:var(--warning);line-height:1.5;
+}
+.udemy-notice.show{display:block}
+.udemy-notice b{color:#e6b44d}
+
+/* ── Folder structure hint ── */
+.folder-hint{
+  display:none;margin-top:4px;font-size:.72rem;color:var(--muted);
+  font-family:'SF Mono','Consolas',monospace;line-height:1.8;
+}
+.folder-hint.show{display:block}
+
 /* ── Scrollbars ── */
 ::-webkit-scrollbar{width:5px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -255,12 +286,12 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
 <body>
 
 <header class="header">
-  <svg width="26" height="26" viewBox="0 0 24 24">
+  <svg width="26" height="26" viewBox="0 0 24 24" id="headerIcon">
     <rect width="24" height="24" rx="5" fill="#ff0000"/>
     <path d="M9.5 7.5v9l7-4.5z" fill="white"/>
   </svg>
   <div>
-    <h1>YouTube Downloader</h1>
+    <h1 id="headerTitle">YouTube Downloader</h1>
     <div class="sub">Tải video hàng loạt · Song song · Real-time progress</div>
   </div>
 </header>
@@ -270,8 +301,27 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
   <!-- ── Left: form ── -->
   <aside class="left">
 
+    <!-- Source tabs -->
+    <div class="source-tabs">
+      <button class="source-tab active" id="tabYT" onclick="setSource('youtube')">
+        <svg width="14" height="14" viewBox="0 0 24 24"><rect width="24" height="24" rx="4" fill="#ff0000"/><path d="M9.5 7.5v9l7-4.5z" fill="white"/></svg>
+        YouTube
+      </button>
+      <button class="source-tab" id="tabUdemy" onclick="setSource('udemy')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#a435f0"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+        Udemy
+      </button>
+    </div>
+
+    <!-- Udemy notice -->
+    <div class="udemy-notice" id="udemyNotice">
+      <b>Yêu cầu đăng nhập:</b> Udemy bắt buộc phải có tài khoản đã mua khoá học.<br>
+      Mở mục <b>Xác thực</b> bên dưới → chọn Browser đã đăng nhập Udemy.<br>
+      File sẽ được lưu theo cấu trúc: <b>CourseName / Section / Lecture.mp4</b>
+    </div>
+
     <div class="field">
-      <label><b>URLs</b> — mỗi dòng một link (video hoặc playlist)</label>
+      <label><b>URLs</b> — <span id="urlHint">mỗi dòng một link (video hoặc playlist)</span></label>
       <textarea id="urls" placeholder="https://www.youtube.com/watch?v=...&#10;https://www.youtube.com/playlist?list=...&#10;https://youtu.be/..."></textarea>
     </div>
 
@@ -295,14 +345,14 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0">
             <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l5 2.18V11c0 3.5-2.33 6.79-5 7.93C9.33 17.79 7 14.5 7 11V7.18L12 5zm-1 3v4h2V8h-2zm0 6v2h2v-2h-2z"/>
           </svg>
-          Xác thực (Members-only / Age-restricted)
+          <span id="authTitle">Xác thực (Members-only / Age-restricted)</span>
         </span>
         <span class="auth-chevron" id="authChevron">▸</span>
       </div>
 
       <div class="auth-body" id="authBody" style="display:none">
         <div class="field" style="margin-top:10px">
-          <label><b>Browser</b> — đọc cookies từ browser đã đăng nhập YouTube</label>
+          <label><b>Browser</b> — đọc cookies từ browser đã đăng nhập <span id="authBrowserHint">YouTube</span></label>
           <select id="cookiesBrowser" onchange="onBrowserChange()">
             <option value="">Không dùng cookies</option>
             <option value="chrome">Chrome</option>
@@ -398,7 +448,7 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
       <div class="sgrid">
         <div class="stat ok"><div class="stat-n" id="sOk">0</div><div class="stat-l">Thành công</div></div>
         <div class="stat fail"><div class="stat-n" id="sFail">0</div><div class="stat-l">Thất bại</div></div>
-        <div class="stat"><div class="stat-n" id="sSkip">0</div><div class="stat-l">Bỏ qua</div></div>
+        <div class="stat"><div class="stat-n" id="sSkip">0</div><div class="stat-l">Đã có</div></div>
         <div class="stat time"><div class="stat-n" id="sTime">—</div><div class="stat-l">Thời gian</div></div>
       </div>
     </div>
@@ -629,6 +679,21 @@ function handle(msg) {
       getCard(msg.index);
       break;
 
+    case 'video_skipped': {
+      const c = getCard(msg.index);
+      c.classList.add('skipped');
+      const t = document.getElementById(`ct${msg.index}`);
+      const m = document.getElementById(`cm${msg.index}`);
+      const s = document.getElementById(`cs${msg.index}`);
+      const track = c.querySelector('.track');
+      if (t) t.textContent = msg.title || msg.url;
+      if (m) m.textContent = 'Đã tải trước đó';
+      if (s) s.textContent = '⏭';
+      if (track) track.style.display = 'none';
+      log(`⏭ Bỏ qua: "${msg.title || msg.url}"`, 'info');
+      break;
+    }
+
     case 'video_info': {
       const c = getCard(msg.index);
       c.classList.add('downloading');
@@ -764,6 +829,57 @@ async function startDownload() {
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') startDownload();
 });
+
+// ── Source toggle ──
+let currentSource = 'youtube';
+
+function setSource(src) {
+  currentSource = src;
+  const isUdemy = src === 'udemy';
+
+  // Tabs
+  document.getElementById('tabYT').classList.toggle('active', !isUdemy);
+  document.getElementById('tabUdemy').classList.toggle('active', isUdemy);
+
+  // Header
+  const icon = document.getElementById('headerIcon');
+  const title = document.getElementById('headerTitle');
+  if (isUdemy) {
+    icon.innerHTML = '<rect width="24" height="24" rx="5" fill="#a435f0"/><path d="M12 4C7.58 4 4 7.58 4 12s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm-1 11H9V9h2v6zm4 0h-2V9h2v6z" fill="white"/>';
+    title.textContent = 'Udemy Downloader';
+  } else {
+    icon.innerHTML = '<rect width="24" height="24" rx="5" fill="#ff0000"/><path d="M9.5 7.5v9l7-4.5z" fill="white"/>';
+    title.textContent = 'YouTube Downloader';
+  }
+
+  // Notice banner
+  document.getElementById('udemyNotice').classList.toggle('show', isUdemy);
+
+  // URL textarea placeholder & hint
+  const urlHint  = document.getElementById('urlHint');
+  const textarea = document.getElementById('urls');
+  if (isUdemy) {
+    urlHint.textContent = 'URL khoá học hoặc lecture Udemy';
+    textarea.placeholder = 'https://www.udemy.com/course/ten-khoa-hoc/\nhttps://www.udemy.com/course/ten-khoa-hoc/learn/lecture/12345';
+  } else {
+    urlHint.textContent = 'mỗi dòng một link (video hoặc playlist)';
+    textarea.placeholder = 'https://www.youtube.com/watch?v=...\nhttps://www.youtube.com/playlist?list=...\nhttps://youtu.be/...';
+  }
+
+  // Auth section
+  document.getElementById('authTitle').textContent = isUdemy
+    ? 'Xác thực Udemy (Bắt buộc)'
+    : 'Xác thực (Members-only / Age-restricted)';
+  document.getElementById('authBrowserHint').textContent = isUdemy ? 'Udemy' : 'YouTube';
+
+  // Auto-expand auth for Udemy
+  const authBody    = document.getElementById('authBody');
+  const authChevron = document.getElementById('authChevron');
+  if (isUdemy && authBody.style.display === 'none') {
+    authBody.style.display = 'block';
+    authChevron.classList.add('open');
+  }
+}
 </script>
 </body>
 </html>

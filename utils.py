@@ -16,6 +16,25 @@ def is_playlist_url(url: str) -> bool:
     return 'playlist?list=' in url
 
 
+def is_valid_udemy_url(url: str) -> bool:
+    return bool(re.match(r'https?://(www\.)?udemy\.com/course/[\w-]+', url.strip()))
+
+
+def is_udemy_course_url(url: str) -> bool:
+    """Full course URL (not individual lecture) — expand into lecture list."""
+    u = url.strip().rstrip('/')
+    return bool(re.match(r'https?://(www\.)?udemy\.com/course/[\w-]+$', u))
+
+
+def detect_source(url: str) -> str:
+    """Returns 'youtube', 'udemy', or 'unknown'."""
+    if is_valid_youtube_url(url):
+        return 'youtube'
+    if is_valid_udemy_url(url):
+        return 'udemy'
+    return 'unknown'
+
+
 def read_urls_from_file(filepath: str) -> list[str]:
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"File not found: {filepath}")

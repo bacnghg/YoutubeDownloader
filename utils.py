@@ -17,7 +17,7 @@ def is_playlist_url(url: str) -> bool:
 
 
 def is_valid_udemy_url(url: str) -> bool:
-    return bool(re.match(r'https?://(www\.)?udemy\.com/course/[\w-]+', url.strip()))
+    return bool(re.match(r'https?://(www\.)?udemy\.com/', url.strip()))
 
 
 def is_udemy_course_url(url: str) -> bool:

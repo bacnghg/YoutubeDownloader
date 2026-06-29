@@ -244,41 +244,116 @@ class Downloader:
         return urls
 
     def get_udemy_lectures(self, course_url: str) -> list[str]:
+        """Expand a Udemy course URL into individual lecture URLs via Udemy API directly.
+
+        Bypasses yt-dlp's UdemyCourseIE (which breaks whenever Udemy changes their
+        page structure) by calling the stable Udemy REST API endpoints.
+        """
         self._emit({'type': 'log', 'level': 'info', 'message': 'Đang lấy danh sách bài học Udemy...'})
+
+        slug_match = re.search(r'/course/([\w-]+)', course_url)
+        if not slug_match:
+            self._emit({'type': 'log', 'level': 'error', 'message': 'URL khoá học Udemy không hợp lệ.'})
+            return []
+        slug = slug_match.group(1)
+
         if not (self.cookies_browser or self.cookies_file):
             self._emit({'type': 'log', 'level': 'warning',
-                        'message': 'Udemy yêu cầu đăng nhập — hãy chọn Browser ở mục Xác thực.'})
+                        'message': 'Udemy yêu cầu đăng nhập — hãy chọn Browser ở mục Xác thực và đóng Chrome trước khi tải.'})
 
-        opts = self._ydl_base({'extract_flat': True, 'ignoreerrors': True, 'noplaylist': False})
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(course_url, download=False)
-
-        if not info:
-            self._emit({'type': 'log', 'level': 'error',
-                        'message': 'Không thể lấy thông tin khoá học. Kiểm tra cookies và URL.'})
+        opts = self._ydl_base({})
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                course_id = self._udemy_find_course_id(ydl, slug, course_url)
+                if not course_id:
+                    self._emit({
+                        'type': 'log', 'level': 'error',
+                        'message': 'Không tìm được Course ID. Đảm bảo đã đăng nhập Udemy trong Chrome và đóng Chrome trước khi tải.',
+                    })
+                    return []
+                self._emit({'type': 'log', 'level': 'info', 'message': f'Course ID: {course_id}'})
+                return self._udemy_fetch_lectures(ydl, course_id, slug)
+        except Exception as e:
+            self._emit({'type': 'log', 'level': 'error', 'message': f'Lỗi Udemy: {_clean(str(e))}'})
             return []
 
-        course_title = info.get('title', 'Unknown Course')
-        entries = info.get('entries', []) or []
+    def _udemy_find_course_id(self, ydl, slug: str, course_url: str) -> str | None:
+        """Find Udemy course ID: tries search API first, then page scraping."""
+        import json as _json
+        from yt_dlp.utils import sanitized_Request
+
+        headers = {
+            'Accept': 'application/json, text/plain, */*',
+            'Referer': 'https://www.udemy.com/',
+        }
+
+        # Method 1: Udemy search API (fastest, no full page download)
+        try:
+            api = f'https://www.udemy.com/api-2.0/courses/?search={slug}&fields%5Bcourse%5D=id,url&page_size=5'
+            data = _json.loads(ydl.urlopen(sanitized_Request(api, headers=headers)).read().decode('utf-8'))
+            for course in data.get('results', []):
+                if slug in (course.get('url') or ''):
+                    return str(course['id'])
+        except Exception:
+            pass
+
+        # Method 2: Scrape course page with broader regex patterns
+        try:
+            html = ydl.urlopen(sanitized_Request(course_url, headers=headers)).read().decode('utf-8', errors='ignore')
+            patterns = [
+                r'"id"\s*:\s*(\d+)[^}]{0,200}"url"\s*:\s*"/course/' + re.escape(slug),
+                r'data-course-id=["\'](\d+)',
+                r'"courseId"\s*:\s*(\d+)',
+                r'/api-2\.0/courses/(\d+)/',
+                r'"course_id"\s*:\s*(\d+)',
+                r'course[_-]?id["\']?\s*[=:]\s*["\']?(\d+)',
+            ]
+            for pattern in patterns:
+                m = re.search(pattern, html)
+                if m:
+                    return m.group(1)
+        except Exception:
+            pass
+
+        return None
+
+    def _udemy_fetch_lectures(self, ydl, course_id: str, slug: str) -> list[str]:
+        """Call Udemy curriculum API and return individual lecture URLs with smuggled course_id."""
+        import json as _json
+        from yt_dlp.utils import sanitized_Request, smuggle_url
+
+        api = (
+            f'https://www.udemy.com/api-2.0/courses/{course_id}/cached-subscriber-curriculum-items'
+            f'?fields%5Bchapter%5D=title,object_index&fields%5Blecture%5D=title,asset&page_size=1000'
+        )
+        headers = {'Accept': 'application/json', 'Referer': 'https://www.udemy.com/'}
+
+        try:
+            data = _json.loads(ydl.urlopen(sanitized_Request(api, headers=headers)).read().decode('utf-8'))
+        except Exception as e:
+            self._emit({
+                'type': 'log', 'level': 'error',
+                'message': f'Không thể tải danh sách bài học — kiểm tra đã mua khoá học và đang đăng nhập. ({_clean(str(e))})',
+            })
+            return []
 
         urls: list[str] = []
-        for entry in entries:
-            if not entry:
+        for entry in data.get('results', []):
+            if entry.get('_class') != 'lecture':
                 continue
-            sub = entry.get('entries')
-            if sub:
-                # Nested: entry is a chapter/section, sub = lectures
-                for lec in sub:
-                    if lec and (lec.get('url') or lec.get('webpage_url')):
-                        urls.append(lec.get('webpage_url') or lec['url'])
-            else:
-                u = entry.get('webpage_url') or entry.get('url')
-                if u:
-                    urls.append(u)
+            asset = entry.get('asset') or {}
+            if isinstance(asset, dict) and asset.get('asset_type') == 'Video':
+                lid = entry.get('id')
+                if lid:
+                    # Smuggle course_id so UdemyIE can download without needing UdemyCourseIE
+                    urls.append(smuggle_url(
+                        f'https://www.udemy.com/{slug}/learn/v4/t/lecture/{lid}',
+                        {'course_id': str(course_id)},
+                    ))
 
-        self._emit({'type': 'playlist_info', 'title': course_title, 'total': len(urls)})
+        self._emit({'type': 'playlist_info', 'title': slug, 'total': len(urls)})
         self._emit({'type': 'log', 'level': 'info',
-                    'message': f'Khoá học "{course_title}" — {len(urls)} bài học'})
+                    'message': f'Khoá học "{slug}" — {len(urls)} bài học video'})
         return urls
 
     def _download_single(self, url: str, index: int) -> DownloadResult:

@@ -24,7 +24,7 @@ _NODE_PATH   = _find_bin('node')
 _FFMPEG_PATH = _find_bin('ffmpeg')
 
 from config import DOWNLOAD_PATH, OUTPUT_TEMPLATE, QUALITY_MAP, MAX_RETRIES, RETRY_DELAY
-from utils import is_valid_youtube_url
+from utils import is_valid_youtube_url, detect_source
 
 _ANSI_RE = re.compile(r'\x1b\[[0-9;]*[mK]')
 
@@ -38,10 +38,20 @@ _PERMANENT_ERRORS = [
     'Private video',
     'removed by the uploader',
     'This video is unavailable',
-    'Join this channel',       # members-only
+    'Join this channel',
     'members-only',
     'This video is members-only',
     'Sign in to confirm your age',
+    # Facebook
+    "You must log in",
+    "This content isn't available",
+    'not available to non-friends',
+]
+
+_FB_AUTH_ERRORS = [
+    "You must log in",
+    "This content isn't available",
+    'not available to non-friends',
 ]
 
 
@@ -190,18 +200,19 @@ class Downloader:
 
     def _download_single(self, url: str, index: int) -> DownloadResult:
         result = DownloadResult(url, index)
+        source = detect_source(url)
 
-        if not is_valid_youtube_url(url):
-            result.error = 'URL không hợp lệ'
+        if source == 'unknown':
+            result.error = 'URL không hợp lệ (hỗ trợ YouTube và Facebook)'
             self._emit({'type': 'video_error', 'index': index,
-                        'title': 'URL không hợp lệ', 'error': result.error})
+                        'title': url, 'error': result.error})
             return result
 
         self._emit({'type': 'video_start', 'index': index})
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                with yt_dlp.YoutubeDL(self._ydl_base()) as ydl:
+                with yt_dlp.YoutubeDL(self._ydl_base({'noplaylist': True})) as ydl:
                     info = ydl.extract_info(url, download=False)
                     result.title = info.get('title', url)
                     duration = info.get('duration_string', '')
@@ -232,6 +243,11 @@ class Downloader:
                             result.error = 'Video members-only — cookies không hợp lệ hoặc chưa tham gia kênh'
                         else:
                             result.error = 'Video members-only — chọn browser đã đăng nhập ở mục Xác thực'
+                    elif any(x in err_msg for x in _FB_AUTH_ERRORS):
+                        if self.cookies_browser or self.cookies_file:
+                            result.error = 'Facebook: video riêng tư — cookies không hợp lệ hoặc chưa là bạn bè'
+                        else:
+                            result.error = 'Facebook: video riêng tư — chọn browser đã đăng nhập Facebook ở mục Xác thực'
                     else:
                         result.error = 'Video private hoặc đã bị xóa'
                     self._emit({'type': 'video_error', 'index': index,

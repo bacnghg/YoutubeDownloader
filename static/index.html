@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>YouTube Downloader</title>
+<title>Video Downloader</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 
@@ -260,8 +260,8 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
     <path d="M9.5 7.5v9l7-4.5z" fill="white"/>
   </svg>
   <div>
-    <h1>YouTube Downloader</h1>
-    <div class="sub">Tải video hàng loạt · Song song · Real-time progress</div>
+    <h1>Video Downloader</h1>
+    <div class="sub">YouTube · Facebook · Song song · Real-time progress</div>
   </div>
 </header>
 
@@ -271,8 +271,8 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
   <aside class="left">
 
     <div class="field">
-      <label><b>URLs</b> — mỗi dòng một link (video hoặc playlist)</label>
-      <textarea id="urls" placeholder="https://www.youtube.com/watch?v=...&#10;https://www.youtube.com/playlist?list=...&#10;https://youtu.be/..."></textarea>
+      <label><b>URLs</b> — mỗi dòng một link · hỗ trợ YouTube và Facebook</label>
+      <textarea id="urls" placeholder="https://www.youtube.com/watch?v=...&#10;https://www.youtube.com/playlist?list=...&#10;https://www.facebook.com/reel/...&#10;https://www.facebook.com/watch/?v=...&#10;https://fb.watch/..."></textarea>
     </div>
 
     <div class="field">
@@ -295,14 +295,14 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0">
             <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l5 2.18V11c0 3.5-2.33 6.79-5 7.93C9.33 17.79 7 14.5 7 11V7.18L12 5zm-1 3v4h2V8h-2zm0 6v2h2v-2h-2z"/>
           </svg>
-          Xác thực (Members-only / Age-restricted)
+          Xác thực (Video riêng tư · Members-only · Age-restricted)
         </span>
         <span class="auth-chevron" id="authChevron">▸</span>
       </div>
 
       <div class="auth-body" id="authBody" style="display:none">
         <div class="field" style="margin-top:10px">
-          <label><b>Browser</b> — đọc cookies từ browser đã đăng nhập YouTube</label>
+          <label><b>Browser</b> — đọc cookies từ browser đã đăng nhập YouTube / Facebook</label>
           <select id="cookiesBrowser" onchange="onBrowserChange()">
             <option value="">Không dùng cookies</option>
             <option value="chrome">Chrome</option>
@@ -543,15 +543,15 @@ function onProfileChange() {
   } else if (emails.length === 1) {
     tipText.textContent = `Profile "${name}" · ${emails[0]}`;
   } else {
-    tipText.textContent = `Profile "${name}" — không có account Google (có thể đã login YouTube riêng)`;
+    tipText.textContent = `Profile "${name}" — không có account Google (có thể đã login YouTube/Facebook riêng)`;
   }
 
   // Warn about active session
   if (emails.length > 1) {
-    hint.innerHTML = `⚠️ Profile này có <b>${emails.length} accounts</b> — yt-dlp dùng account đang <b>active trên YouTube</b> trong Chrome.
-      Hãy mở Chrome, vào youtube.com, switch sang đúng account, rồi đóng Chrome trước khi tải.`;
+    hint.innerHTML = `⚠️ Profile này có <b>${emails.length} accounts</b> — yt-dlp dùng account đang <b>active</b> trong Chrome.
+      Hãy mở Chrome, switch sang đúng account, rồi <b>đóng Chrome hoàn toàn</b> trước khi tải.`;
   } else {
-    hint.textContent = `Đảm bảo đã đăng nhập YouTube trong Chrome trước khi tải`;
+    hint.textContent = `Đảm bảo đã đăng nhập YouTube / Facebook trong Chrome, rồi đóng Chrome trước khi tải`;
   }
 }
 

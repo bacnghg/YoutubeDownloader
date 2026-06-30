@@ -292,7 +292,7 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
   </svg>
   <div>
     <h1 id="headerTitle">YouTube Downloader</h1>
-    <div class="sub">Tải video hàng loạt · Song song · Real-time progress</div>
+    <div class="sub">YouTube · Udemy · Facebook · Song song · Real-time progress</div>
   </div>
 </header>
 
@@ -310,6 +310,10 @@ input[type=range]{width:100%;accent-color:var(--primary);cursor:pointer}
       <button class="source-tab" id="tabUdemy" onclick="setSource('udemy')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="#a435f0"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
         Udemy
+      </button>
+      <button class="source-tab" id="tabFacebook" onclick="setSource('facebook')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#1877f2"><path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95z"/></svg>
+        Facebook
       </button>
     </div>
 
@@ -593,15 +597,15 @@ function onProfileChange() {
   } else if (emails.length === 1) {
     tipText.textContent = `Profile "${name}" · ${emails[0]}`;
   } else {
-    tipText.textContent = `Profile "${name}" — không có account Google (có thể đã login YouTube riêng)`;
+    tipText.textContent = `Profile "${name}" — không có account Google (có thể đã login YouTube/Facebook riêng)`;
   }
 
   // Warn about active session
   if (emails.length > 1) {
-    hint.innerHTML = `⚠️ Profile này có <b>${emails.length} accounts</b> — yt-dlp dùng account đang <b>active trên YouTube</b> trong Chrome.
-      Hãy mở Chrome, vào youtube.com, switch sang đúng account, rồi đóng Chrome trước khi tải.`;
+    hint.innerHTML = `⚠️ Profile này có <b>${emails.length} accounts</b> — yt-dlp dùng account đang <b>active</b> trong Chrome.
+      Hãy mở Chrome, switch sang đúng account, rồi <b>đóng Chrome hoàn toàn</b> trước khi tải.`;
   } else {
-    hint.textContent = `Đảm bảo đã đăng nhập YouTube trong Chrome trước khi tải`;
+    hint.textContent = `Đảm bảo đã đăng nhập YouTube / Facebook trong Chrome, rồi đóng Chrome trước khi tải`;
   }
 }
 
@@ -836,10 +840,12 @@ let currentSource = 'youtube';
 function setSource(src) {
   currentSource = src;
   const isUdemy = src === 'udemy';
+  const isFacebook = src === 'facebook';
 
   // Tabs
-  document.getElementById('tabYT').classList.toggle('active', !isUdemy);
+  document.getElementById('tabYT').classList.toggle('active', src === 'youtube');
   document.getElementById('tabUdemy').classList.toggle('active', isUdemy);
+  document.getElementById('tabFacebook').classList.toggle('active', isFacebook);
 
   // Header
   const icon = document.getElementById('headerIcon');
@@ -847,12 +853,15 @@ function setSource(src) {
   if (isUdemy) {
     icon.innerHTML = '<rect width="24" height="24" rx="5" fill="#a435f0"/><path d="M12 4C7.58 4 4 7.58 4 12s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm-1 11H9V9h2v6zm4 0h-2V9h2v6z" fill="white"/>';
     title.textContent = 'Udemy Downloader';
+  } else if (isFacebook) {
+    icon.innerHTML = '<rect width="24" height="24" rx="5" fill="#1877f2"/><path d="M18 12c0-3.31-2.69-6-6-6s-6 2.69-6 6c0 2.97 2.17 5.43 5 5.91V13.5H9.5v-1.5H11V10.7c0-1.49.89-2.31 2.25-2.31.65 0 1.33.12 1.33.12v1.46h-.75c-.74 0-.96.46-.96 1v1.03h1.64l-.26 1.5H13v4.41c2.83-.48 5-2.94 5-5.91z" fill="white"/>';
+    title.textContent = 'Facebook Downloader';
   } else {
     icon.innerHTML = '<rect width="24" height="24" rx="5" fill="#ff0000"/><path d="M9.5 7.5v9l7-4.5z" fill="white"/>';
     title.textContent = 'YouTube Downloader';
   }
 
-  // Notice banner
+  // Notice banner (Udemy only)
   document.getElementById('udemyNotice').classList.toggle('show', isUdemy);
 
   // URL textarea placeholder & hint
@@ -861,16 +870,24 @@ function setSource(src) {
   if (isUdemy) {
     urlHint.textContent = 'URL khoá học hoặc lecture Udemy';
     textarea.placeholder = 'https://www.udemy.com/course/ten-khoa-hoc/\nhttps://www.udemy.com/course/ten-khoa-hoc/learn/lecture/12345';
+  } else if (isFacebook) {
+    urlHint.textContent = 'mỗi dòng một link video/reel Facebook';
+    textarea.placeholder = 'https://www.facebook.com/reel/...\nhttps://www.facebook.com/watch/?v=...\nhttps://fb.watch/...';
   } else {
     urlHint.textContent = 'mỗi dòng một link (video hoặc playlist)';
     textarea.placeholder = 'https://www.youtube.com/watch?v=...\nhttps://www.youtube.com/playlist?list=...\nhttps://youtu.be/...';
   }
 
   // Auth section
-  document.getElementById('authTitle').textContent = isUdemy
-    ? 'Xác thực Udemy (Bắt buộc)'
-    : 'Xác thực (Members-only / Age-restricted)';
-  document.getElementById('authBrowserHint').textContent = isUdemy ? 'Udemy' : 'YouTube';
+  if (isUdemy) {
+    document.getElementById('authTitle').textContent = 'Xác thực Udemy (Bắt buộc)';
+  } else if (isFacebook) {
+    document.getElementById('authTitle').textContent = 'Xác thực Facebook (Video riêng tư)';
+  } else {
+    document.getElementById('authTitle').textContent = 'Xác thực (Members-only / Age-restricted)';
+  }
+  document.getElementById('authBrowserHint').textContent =
+    isUdemy ? 'Udemy' : (isFacebook ? 'Facebook' : 'YouTube');
 
   // Auto-expand auth for Udemy
   const authBody    = document.getElementById('authBody');

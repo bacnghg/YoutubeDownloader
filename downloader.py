@@ -56,6 +56,16 @@ _PERMANENT_ERRORS = [
     'Sign in to confirm your age',
     "You don't have access to this course",  # Udemy: chưa mua khoá học
     'please login',                           # Udemy: chưa đăng nhập
+    # Facebook
+    "You must log in",
+    "This content isn't available",
+    'not available to non-friends',
+]
+
+_FB_AUTH_ERRORS = [
+    "You must log in",
+    "This content isn't available",
+    'not available to non-friends',
 ]
 
 
@@ -361,7 +371,7 @@ class Downloader:
         source = detect_source(url)
 
         if source == 'unknown':
-            result.error = 'URL không hợp lệ (hỗ trợ YouTube và Udemy)'
+            result.error = 'URL không hợp lệ (hỗ trợ YouTube, Udemy và Facebook)'
             self._emit({'type': 'video_error', 'index': index,
                         'title': url, 'error': result.error})
             return result
@@ -427,6 +437,11 @@ class Downloader:
                             result.error = 'Udemy: cookies không hợp lệ hoặc chưa mua khoá học này'
                         else:
                             result.error = 'Udemy: chọn browser đã đăng nhập Udemy ở mục Xác thực'
+                    elif any(x in err_msg for x in _FB_AUTH_ERRORS):
+                        if self.cookies_browser or self.cookies_file:
+                            result.error = 'Facebook: video riêng tư — cookies không hợp lệ hoặc chưa là bạn bè'
+                        else:
+                            result.error = 'Facebook: video riêng tư — chọn browser đã đăng nhập Facebook ở mục Xác thực'
                     else:
                         result.error = 'Video private hoặc đã bị xóa'
                     self._emit({'type': 'video_error', 'index': index,

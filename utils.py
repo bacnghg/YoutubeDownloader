@@ -12,6 +12,13 @@ def is_valid_youtube_url(url: str) -> bool:
     return bool(pattern.match(url.strip()))
 
 
+def is_valid_facebook_url(url: str) -> bool:
+    return bool(re.match(
+        r'https?://(www\.|m\.)?facebook\.com/.+|https?://fb\.watch/.+',
+        url.strip()
+    ))
+
+
 def is_playlist_url(url: str) -> bool:
     return 'playlist?list=' in url
 
@@ -27,11 +34,14 @@ def is_udemy_course_url(url: str) -> bool:
 
 
 def detect_source(url: str) -> str:
-    """Returns 'youtube', 'udemy', or 'unknown'."""
-    if is_valid_youtube_url(url):
+    """Returns 'youtube', 'udemy', 'facebook', or 'unknown'."""
+    u = url.strip()
+    if is_valid_youtube_url(u):
         return 'youtube'
-    if is_valid_udemy_url(url):
+    if is_valid_udemy_url(u):
         return 'udemy'
+    if is_valid_facebook_url(u):
+        return 'facebook'
     return 'unknown'
 
 
